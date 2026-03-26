@@ -166,13 +166,27 @@
 
     .ip-row {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: space-between;
       padding: 10px 14px;
       border-bottom: 1px solid var(--border);
     }
 
     .ip-row:last-child { border-bottom: none; }
+
+    .ip-error {
+      margin: 0 18px 16px;
+      padding: 12px 14px;
+      border-radius: 8px;
+      background: rgba(255, 77, 106, 0.10);
+      border: 1px solid rgba(255, 77, 106, 0.35);
+      color: #ff8fa0;
+      font-size: 11px;
+      line-height: 1.45;
+      display: none;
+    }
+
+    .ip-error.show { display: block; }
 
     .ip-key {
       font-family: var(--mono);
@@ -187,6 +201,11 @@
       font-size: 12px;
       color: var(--text);
       font-weight: 600;
+      flex: 1 1 auto;
+      text-align: right;
+      margin-left: 12px;
+      overflow-wrap: anywhere;
+      line-height: 1.25;
     }
 
     .ip-val.loading {
@@ -401,6 +420,8 @@
       </div>
     </div>
 
+    <div class="ip-error" id="ipError"></div>
+
     <button class="toggle-btn" id="toggleBtn">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M6 8H5a4 4 0 0 0 0 8h1"/>
@@ -433,7 +454,7 @@
         <strong>⚡ How to enable SOCKS5 on your server?</strong>
         Connect via SSH and run the following command:<br><br>
         sudo apt install microsocks -y<br>
-        microsocks -p 1080 &amp;<br><br>
+        microsocks -i 0.0.0.0 -p 1080 &amp;<br><br>
         Open TCP port 1080 to your IP address in the EC2 Security Group.
       </div>
     </div>

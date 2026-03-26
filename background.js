@@ -11,13 +11,18 @@ chrome.runtime.onStartup.addListener(async () => {
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'enable') {
-    applyProxy(msg.host, msg.port);
-    chrome.storage.local.set({ enabled: true, host: msg.host, port: msg.port });
-    sendResponse({ success: true });
+    applyProxy(msg.host, msg.port, () => {
+      chrome.storage.local.set(
+        { enabled: true, host: msg.host, port: msg.port },
+        () => sendResponse({ success: true })
+      );
+    });
+    return true; // async: sendResponse happens in applyProxy callback
   } else if (msg.action === 'disable') {
-    clearProxy();
-    chrome.storage.local.set({ enabled: false });
-    sendResponse({ success: true });
+    clearProxy(() => {
+      chrome.storage.local.set({ enabled: false }, () => sendResponse({ success: true }));
+    });
+    return true; // async: sendResponse happens in clearProxy callback
   } else if (msg.action === 'getStatus') {
     chrome.storage.local.get(['enabled', 'host', 'port'], (data) => {
       sendResponse(data);
@@ -26,7 +31,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 });
 
-function applyProxy(host, port) {
+function applyProxy(host, port, onApplied) {
   const config = {
     mode: 'fixed_servers',
     rules: {
@@ -35,16 +40,27 @@ function applyProxy(host, port) {
         host: host,
         port: port
       },
-      bypassList: ['localhost', '127.0.0.1']
+      // Geo/IP providers sometimes block requests that originate from EC2.
+      // We still want "General IP" to be fetched via the proxy, so we do NOT
+      // bypass the IP provider (ipify). Instead, we bypass geo lookup hosts.
+      bypassList: [
+        'localhost',
+        '127.0.0.1',
+        'ipapi.co',
+        'ip-api.com',
+        'ipwho.is'
+      ]
     }
   };
   chrome.proxy.settings.set({ value: config, scope: 'regular' }, () => {
     console.log(`[EC2 Proxy] Connected → ${host}:${port}`);
+    if (typeof onApplied === 'function') onApplied();
   });
 }
 
-function clearProxy() {
+function clearProxy(onCleared) {
   chrome.proxy.settings.clear({ scope: 'regular' }, () => {
     console.log('[EC2 Proxy] Disconnected');
+    if (typeof onCleared === 'function') onCleared();
   });
 }

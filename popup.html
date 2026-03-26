@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>EC2 Proxy</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@400;700;800&display=swap');
+
+    :root {
+      --bg: #0a0c10;
+      --surface: #111318;
+      --border: #1e2230;
+      --accent: #00e5a0;
+      --accent-dim: rgba(0, 229, 160, 0.12);
+      --accent-glow: rgba(0, 229, 160, 0.35);
+      --danger: #ff4d6a;
+      --danger-dim: rgba(255, 77, 106, 0.12);
+      --text: #e8eaf0;
+      --muted: #5a6070;
+      --mono: 'JetBrains Mono', monospace;
+      --sans: 'Syne', sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 320px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      overflow: hidden;
+    }
+
+    /* --- HEADER --- */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 18px 14px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .logo-icon {
+      width: 28px;
+      height: 28px;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent-glow);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .logo-icon svg { width: 16px; height: 16px; }
+
+    .logo-text {
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+      color: var(--text);
+    }
+
+    .logo-text span { color: var(--accent); }
+
+    .settings-btn {
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 4px;
+      transition: color 0.2s;
+      display: flex;
+      align-items: center;
+    }
+    .settings-btn:hover { color: var(--text); }
+
+    /* --- VIEWS --- */
+    .view { display: none; }
+    .view.active { display: block; }
+
+    /* --- MAIN VIEW --- */
+    .status-section {
+      padding: 24px 18px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-ring {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      transition: border-color 0.4s, box-shadow 0.4s;
+      margin-bottom: 4px;
+    }
+
+    .status-ring.connected {
+      border-color: var(--accent);
+      box-shadow: 0 0 20px var(--accent-glow), inset 0 0 20px var(--accent-dim);
+    }
+
+    .status-ring.connected::before {
+      content: '';
+      position: absolute;
+      inset: -6px;
+      border-radius: 50%;
+      border: 1px solid var(--accent-glow);
+      animation: pulse-ring 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-ring {
+      0%, 100% { opacity: 0.6; transform: scale(1); }
+      50% { opacity: 0.15; transform: scale(1.08); }
+    }
+
+    .status-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: background 0.4s, box-shadow 0.4s;
+    }
+
+    .status-ring.connected .status-dot {
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent);
+    }
+
+    .status-label {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      transition: color 0.3s;
+    }
+
+    .status-label.connected { color: var(--accent); }
+
+    /* IP info */
+    .ip-section {
+      margin: 0 18px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      transition: opacity 0.3s;
+    }
+
+    .ip-section.hidden { opacity: 0.3; pointer-events: none; }
+
+    .ip-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .ip-row:last-child { border-bottom: none; }
+
+    .ip-key {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .ip-val {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .ip-val.loading {
+      color: var(--muted);
+      animation: blink 1.2s ease-in-out infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* Toggle button */
+    .toggle-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: calc(100% - 36px);
+      margin: 0 18px 18px;
+      padding: 13px;
+      border-radius: 8px;
+      border: 1px solid var(--accent-glow);
+      background: var(--accent-dim);
+      color: var(--accent);
+      font-family: var(--sans);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .toggle-btn:hover {
+      background: rgba(0, 229, 160, 0.2);
+      box-shadow: 0 0 16px var(--accent-glow);
+    }
+
+    .toggle-btn.disconnect {
+      border-color: rgba(255, 77, 106, 0.4);
+      background: var(--danger-dim);
+      color: var(--danger);
+    }
+
+    .toggle-btn.disconnect:hover {
+      background: rgba(255, 77, 106, 0.2);
+      box-shadow: 0 0 16px rgba(255,77,106,0.25);
+    }
+
+    .toggle-btn svg { width: 16px; height: 16px; }
+
+    /* No config banner */
+    .no-config {
+      margin: 0 18px 18px;
+      padding: 12px 14px;
+      background: rgba(255, 200, 0, 0.08);
+      border: 1px solid rgba(255, 200, 0, 0.25);
+      border-radius: 8px;
+      font-size: 12px;
+      color: #ffd060;
+      line-height: 1.5;
+      display: none;
+    }
+
+    /* --- SETTINGS VIEW --- */
+    .settings-content {
+      padding: 18px;
+    }
+
+    .settings-title {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+
+    .field {
+      margin-bottom: 12px;
+    }
+
+    .field label {
+      display: block;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 6px;
+    }
+
+    .field input {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 9px 12px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .field input::placeholder { color: var(--muted); }
+
+    .field input:focus {
+      border-color: var(--accent-glow);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+
+    .save-btn {
+      width: 100%;
+      padding: 11px;
+      background: var(--accent);
+      border: none;
+      border-radius: 6px;
+      color: #000;
+      font-family: var(--sans);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      margin-top: 4px;
+      transition: opacity 0.2s, box-shadow 0.2s;
+    }
+
+    .save-btn:hover {
+      opacity: 0.9;
+      box-shadow: 0 0 16px var(--accent-glow);
+    }
+
+    .save-msg {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent);
+      text-align: center;
+      margin-top: 10px;
+      height: 16px;
+      transition: opacity 0.3s;
+    }
+
+    .server-hint {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      line-height: 1.6;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-top: 14px;
+    }
+
+    .server-hint strong {
+      color: var(--accent);
+      display: block;
+      margin-bottom: 4px;
+      font-size: 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="8" cy="8" r="3" stroke="#00e5a0" stroke-width="1.5"/>
+          <path d="M8 1v2M8 13v2M1 8h2M13 8h2" stroke="#00e5a0" stroke-width="1.5" stroke-linecap="round"/>
+          <path d="M3.5 3.5l1.4 1.4M11.1 11.1l1.4 1.4M11.1 4.9l-1.4 1.4M4.9 11.1l-1.4 1.4" stroke="#00e5a0" stroke-width="1.2" stroke-linecap="round" opacity="0.5"/>
+        </svg>
+      </div>
+      <div class="logo-text">EC2 <span>Proxy</span></div>
+    </div>
+    <button class="settings-btn" id="settingsToggle" title="Settings">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- MAIN VIEW -->
+  <div class="view active" id="mainView">
+
+    <div class="no-config" id="noConfig">
+      ⚠️ Sunucu ayarları yapılmamış. Sağ üstteki ⚙️ ikonuna tıkla ve EC2 IP + port gir.
+    </div>
+
+    <div class="status-section">
+      <div class="status-ring" id="statusRing">
+        <div class="status-dot" id="statusDot"></div>
+      </div>
+      <div class="status-label" id="statusLabel">Bağlı Değil</div>
+    </div>
+
+    <div class="ip-section hidden" id="ipSection">
+      <div class="ip-row">
+        <span class="ip-key">Sunucu</span>
+        <span class="ip-val" id="serverDisplay">—</span>
+      </div>
+      <div class="ip-row">
+        <span class="ip-key">Genel IP</span>
+        <span class="ip-val" id="publicIp">—</span>
+      </div>
+      <div class="ip-row">
+        <span class="ip-key">Konum</span>
+        <span class="ip-val" id="ipLocation">—</span>
+      </div>
+    </div>
+
+    <button class="toggle-btn" id="toggleBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M6 8H5a4 4 0 0 0 0 8h1"/>
+        <line x1="6" y1="12" x2="18" y2="12"/>
+      </svg>
+      Bağlan
+    </button>
+
+  </div>
+
+  <!-- SETTINGS VIEW -->
+  <div class="view" id="settingsView">
+    <div class="settings-content">
+      <div class="settings-title">Sunucu Ayarları</div>
+
+      <div class="field">
+        <label>EC2 IP Adresi</label>
+        <input type="text" id="inputHost" placeholder="1.2.3.4" />
+      </div>
+
+      <div class="field">
+        <label>SOCKS5 Port</label>
+        <input type="number" id="inputPort" placeholder="1080" value="1080" />
+      </div>
+
+      <button class="save-btn" id="saveBtn">Kaydet</button>
+      <div class="save-msg" id="saveMsg"></div>
+
+      <div class="server-hint">
+        <strong>⚡ Sunucunda SOCKS5 nasıl açarsın?</strong>
+        SSH ile bağlan, şu komutu çalıştır:<br><br>
+        sudo apt install microsocks -y<br>
+        microsocks -p 1080 &amp;<br><br>
+        EC2 Security Group'ta TCP 1080 portunu IP'ne aç.
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

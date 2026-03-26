@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "EC2 Proxy",
   "version": "1.0.0",
-  "description": "Connect to your Amazon EC2 server via SOCKS5 proxy with one click.",
+  "description": "Connect your browser to an Amazon EC2 SOCKS5 proxy with one click.",
   "permissions": ["proxy", "storage"],
   "host_permissions": ["<all_urls>"],
   "background": {

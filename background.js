@@ -1,14 +1,53 @@
 // EC2 Proxy - Background Service Worker
 
-// Apply proxy settings on startup if previously enabled
-chrome.runtime.onStartup.addListener(async () => {
+// ─── Core: re-apply proxy whenever the SW wakes up ───────────────────────────
+// Chrome MV3 terminates the service worker after ~30s of inactivity.
+// When it wakes again (new request, alarm, etc.) we must re-apply the proxy.
+async function restoreProxyIfNeeded() {
   const { enabled, host, port } = await chrome.storage.local.get(['enabled', 'host', 'port']);
   if (enabled && host && port) {
     applyProxy(host, parseInt(port));
   }
+}
+
+// Runs on browser startup (cold start)
+chrome.runtime.onStartup.addListener(() => {
+  restoreProxyIfNeeded();
 });
 
-// Listen for messages from popup
+// Runs every time the service worker is instantiated (handles SW termination/wake)
+restoreProxyIfNeeded();
+
+// ─── Keep-alive alarm: wake SW every ~1min so proxy stays applied ────────────
+// We check first — recreating on every SW wake would reset the timer,
+// making the alarm fire unreliably. Chrome's minimum period is 1 minute.
+chrome.alarms.get('keepAlive', (existing) => {
+  if (!existing) {
+    chrome.alarms.create('keepAlive', { periodInMinutes: 1 });
+  }
+});
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === 'keepAlive') {
+    restoreProxyIfNeeded();
+  }
+});
+
+// ─── Detect external proxy changes and re-apply ───────────────────────────────
+// If the OS, another extension, or a network change resets proxy settings,
+// this listener fires and we immediately restore ours.
+chrome.proxy.settings.onChange.addListener(async (details) => {
+  // Only act if we control 'regular' scope and extension is supposed to be on
+  if (details.levelOfControl !== 'controlled_by_this_extension') {
+    const { enabled, host, port } = await chrome.storage.local.get(['enabled', 'host', 'port']);
+    if (enabled && host && port) {
+      console.warn('[EC2 Proxy] Proxy was changed externally — restoring...');
+      applyProxy(host, parseInt(port));
+    }
+  }
+});
+
+// ─── Message handler ──────────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'enable') {
     applyProxy(msg.host, msg.port, () => {
@@ -17,20 +56,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         () => sendResponse({ success: true })
       );
     });
-    return true; // async: sendResponse happens in applyProxy callback
+    return true;
   } else if (msg.action === 'disable') {
     clearProxy(() => {
       chrome.storage.local.set({ enabled: false }, () => sendResponse({ success: true }));
     });
-    return true; // async: sendResponse happens in clearProxy callback
+    return true;
   } else if (msg.action === 'getStatus') {
     chrome.storage.local.get(['enabled', 'host', 'port'], (data) => {
       sendResponse(data);
     });
-    return true; // async
+    return true;
   }
 });
 
+// ─── Proxy helpers ────────────────────────────────────────────────────────────
 function applyProxy(host, port, onApplied) {
   const config = {
     mode: 'fixed_servers',
@@ -40,15 +80,9 @@ function applyProxy(host, port, onApplied) {
         host: host,
         port: port
       },
-      // Geo/IP providers sometimes block requests that originate from EC2.
-      // We still want "General IP" to be fetched via the proxy, so we do NOT
-      // bypass the IP provider (ipify). Instead, we bypass geo lookup hosts.
       bypassList: [
         'localhost',
-        '127.0.0.1',
-        'ipapi.co',
-        'ip-api.com',
-        'ipwho.is'
+        '127.0.0.1'
       ]
     }
   };

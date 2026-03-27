@@ -3,7 +3,7 @@
   "name": "EC2 Proxy",
   "version": "1.0.0",
   "description": "Connect your browser to an Amazon EC2 SOCKS5 proxy with one click.",
-  "permissions": ["proxy", "storage"],
+  "permissions": ["proxy", "storage", "alarms"],
   "host_permissions": ["https://ipapi.co/*", "https://free.freeipapi.com/*"],
   "background": {
     "service_worker": "background.js"
